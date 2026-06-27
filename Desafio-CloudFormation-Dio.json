@@ -1,0 +1,186 @@
+{
+	"Description": "Criando EC2 Via CloudFormation",
+	"Resources": {
+		"MinhaVPC": {
+			"Type": "AWS::EC2::VPC",
+			"Properties": {
+				"CidrBlock": "10.0.0.0/16",
+				"EnableDnsSupport": "true",
+				"EnableDnsHostnames": "true",
+				"Tags": [
+					{
+						"Key": "MinhaVPC",
+						"Value": "MinhaRedeVPC"
+					}
+				]
+			}
+		},
+		"MinhaSubnet": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"VpcId": {
+					"Ref": "MinhaVPC"
+				},
+				"AvailabilityZone": "us-east-1b",
+				"CidrBlock": "10.0.15.0/24",
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "MinhaRedeVPC"
+					}
+				]
+			}
+		},
+		"PapelDeAcessoEC2S3": {
+			"Type": "AWS::IAM::Role",
+			"Properties": {
+				"AssumeRolePolicyDocument": {
+					"Statement": [
+						{
+							"Effect": "Allow",
+							"Principal": {
+								"Service": [
+									"ec2.amazonaws.com"
+								]
+							},
+							"Action": [
+								"sts:AssumeRole"
+							]
+						}
+					]
+				},
+				"Policies": [
+					{
+						"PolicyName": "PermissaoAcessoS3",
+						"PolicyDocument": {
+							"Statement": [
+								{
+                                    "sid":"ConcedendoAcessoAoBucket",
+									"Effect": "Allow",
+									"Action": [
+										"s3:GetObject",
+										"s3:PutObject",
+										"s3:ListBucket"
+									],
+									"Resource": [
+										{
+											"Fn::GetAtt": [
+												"MeuBucketS3",
+												"Arn"
+											]
+										},
+										{
+											"Fn::Sub": "${MeuBucketS3.Arn}/*"
+										}
+									]
+								}
+							]
+						}
+					}
+				]
+			}
+		},
+		"PerfilDeAcessoEC2": {
+			"Type": "AWS::IAM::InstanceProfile",
+			"Properties": {
+				"Roles": [
+					{
+						"Ref": "PapelDeAcessoEC2S3"
+					}
+				]
+			}
+		},
+		"MeuBucketS3": {
+			"Type": "AWS::S3::Bucket",
+			"Properties": {
+				"BucketName": "MB-${AWS::AccountId}-${AWS::Region}"
+            },
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": "MeuBucketS3"
+                }
+            ]
+		},
+		"MinhaEC1": {
+			"Type": "AWS::EC2::Instance",
+			"Properties": {
+				"AvailabilityZone": "us-east-1b",
+				"ImageId": "ami-091138d0f0d41ff90",
+				"InstanceType": "t2.micro",
+				"IamInstanceProfile": {
+					"Ref": "PerfilDeAcessoEC2"
+				},
+				"SubnetId": {
+					"Ref": "MinhaSubnet"
+				},
+                "Tags": [
+					{
+						"Key": "Name",
+						"Value": "MinhaEC1"
+					}
+				]
+			}
+		},
+		"MinhaEC2": {
+			"Type": "AWS::EC2::Instance",
+			"Properties": {
+				"AvailabilityZone": "us-east-1b",
+				"ImageId": "ami-091138d0f0d41ff90",
+				"InstanceType": "t2.micro",
+				"IamInstanceProfile": {
+					"Ref": "PerfilDeAcessoEC2"
+				},
+				"SubnetId": {
+					"Ref": "MinhaSubnet"
+				},
+                "Tags": [
+					{
+						"Key": "Name",
+						"Value": "MinhaEC2"
+					}
+				]
+			}
+		},
+		"BalancearCargaSubnet": {
+			"Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+			"Properties": {
+				"Subnets": {
+					"Ref": "MinhaSubnet",
+					"Type": "application",
+					"Scheme": "internet-facing"
+				},
+                "Tags": [
+					{
+						"Key": "Name",
+						"Value": "BalancearCargaSubnet"
+					}
+				]
+			}
+		},
+		"BalancearCargaSMVs": {
+			"Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+			"Properties": {
+				"Protocol": "HTTPS",
+				"VpcId": {
+					"Ref": "MinhaVPC"
+				},
+                "Tags": [
+					{
+						"Key": "Name",
+						"Value": "BalancearCargaSMVs"
+					}
+				],
+				"Targets": [
+					{
+						"Ref": "MinhaEC1"
+					},
+					{
+						"Ref": "MinhaEC2"
+					}
+				],
+				"Port": 80
+			}
+		}
+	}
+}
